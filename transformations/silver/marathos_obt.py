@@ -1,0 +1,78 @@
+from pyspark import pipelines as dp
+from pyspark.sql.functions import *
+
+
+@dp.table(
+    name="marathos.silver.marathos_obt",
+    comment="Cleaned Marathos one big table"
+)
+def marathos_obt():
+    df = spark.sql("FROM STREAM marathos.bronze.results_raw")
+
+    df_clean = (
+        df
+        .withColumnRenamed("Year of event", "event_year")
+        .withColumnRenamed("Event dates", "event_dates")
+        .withColumnRenamed("Event name", "event_name")
+        .withColumnRenamed("Event distance/length", "event_distance_length")
+        .withColumnRenamed("Event number of finishers", "event_number_of_finishers")
+        .withColumnRenamed("Athlete performance", "athlete_performance")
+        .withColumnRenamed("Athlete club", "athlete_club")
+        .withColumnRenamed("Athlete country", "athlete_country")
+        .withColumnRenamed("Athlete year of birth", "athlete_year_of_birth")
+        .withColumnRenamed("Athlete gender", "athlete_gender")
+        .withColumnRenamed("Athlete age category", "athlete_age_category")
+        .withColumnRenamed("Athlete average speed", "athlete_average_speed")
+        .withColumnRenamed("Athlete ID", "athlete_id")
+    )
+
+    df_clean = (
+        df_clean
+        .filter(~col("athlete_performance").contains("d"))
+        .filter(~col("event_distance_length").contains("Etappen"))
+        .withColumn(
+            "event_type",
+            when(col("event_distance_length").contains("km"), "distance")
+            .when(col("event_distance_length").contains("mi"), "distance")
+            .when(col("event_distance_length").contains("h"), "time")
+            .otherwise("unknown")
+        )
+        .filter(
+            ~(
+                (col("event_type") == "distance") &
+                (~col("athlete_performance").contains("h"))
+            )
+        )
+        .withColumn(
+            "athlete_club",
+            regexp_replace(
+                when(col("athlete_club").isNull(), "Unknown")
+                .otherwise(trim(col("athlete_club"))),
+                r"\*",
+                ""
+            )
+        )
+        .withColumn(
+            "athlete_average_speed",
+            round(expr("try_cast(athlete_average_speed as double)"), 2)
+        )
+        .withColumn(
+            "event_date_clean",
+            regexp_extract(col("event_dates"), r"(\d{2}\.\d{2}\.\d{4})$", 1)
+        )
+        .withColumn(
+            "event_date",
+            to_date(col("event_date_clean"), "dd.MM.yyyy")
+        )
+    )
+
+    df_clean = (
+    df_clean
+    .withColumn("event_id", abs(hash(col("event_name"))))
+    .withColumn(
+        "result_id",
+        abs(hash(col("event_name"), col("athlete_id"), col("athlete_performance")))
+        )
+    )
+    df_clean = df_clean.drop("event_date_clean")
+    return df_clean
