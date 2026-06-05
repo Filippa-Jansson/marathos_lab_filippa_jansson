@@ -13,7 +13,7 @@ schema = (
 
 
 @dp.table(
-    name="results_raw",
+    name="marathos.bronze.results_raw",
     comment="Raw marathon results data ingested into the bronze layer",
     table_properties={
         "delta.columnMapping.mode": "name",
