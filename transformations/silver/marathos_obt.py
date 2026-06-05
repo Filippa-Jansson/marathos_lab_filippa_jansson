@@ -56,6 +56,9 @@ def marathos_obt():
             "athlete_average_speed",
             round(expr("try_cast(athlete_average_speed as double)"), 2)
         )
+        .filter(
+            col("athlete_average_speed").between(1, 25)
+        )
         .withColumn(
             "event_date_clean",
             regexp_extract(col("event_dates"), r"(\d{2}\.\d{2}\.\d{4})$", 1)
@@ -65,14 +68,27 @@ def marathos_obt():
             to_date(col("event_date_clean"), "dd.MM.yyyy")
         )
     )
-
     df_clean = (
-    df_clean
-    .withColumn("event_id", abs(hash(col("event_name"))))
-    .withColumn(
-        "result_id",
-        abs(hash(col("event_name"), col("athlete_id"), col("athlete_performance")))
+        df_clean
+        .withColumn("event_id", abs(hash(col("event_name"))))
+        .withColumn(
+            "result_id",
+            abs(hash(col("event_name"), col("athlete_id"), col("athlete_performance")))
+        )
+        .withColumn(
+            "athlete_year_of_birth",
+            col("athlete_year_of_birth").cast("double")
+        )
+        .filter(
+            col("athlete_year_of_birth").between(1720, 2004)
+        )
+        .withColumn(
+            "athlete_age_category",
+            when(col("athlete_age_category").isNull(), "Unknown")
+            .otherwise(trim(col("athlete_age_category")))
         )
     )
+
     df_clean = df_clean.drop("event_date_clean")
+
     return df_clean
